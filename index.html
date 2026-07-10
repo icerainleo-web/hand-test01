@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>色彩升級：雙手獨立辨識與顏色區分</title>
+  <title>色彩與左右手修正版</title>
   
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
@@ -61,7 +61,7 @@
 <body>
 
   <h1>AI 雙手色彩區分與左右手辨識</h1>
-  <p>第一隻手為螢光綠，第二隻手為淺紫色。還能自動辨識左右手喔！</p>
+  <p>第一隻手為螢光綠，第二隻手為淺紫色。已修正鏡像下的左右手標籤！</p>
   
   <button class="btn-control" id="toggleMirror">切換為：正常模式</button>
 
@@ -116,19 +116,25 @@
       // 2. 如果有偵測到手
       if (results.multiHandLandmarks && results.multiHandedness) {
         
-        // 使用 index 來知道目前正在處理第幾隻手
         results.multiHandLandmarks.forEach((landmarks, index) => {
           
-          // 【功能升級】：動態決定這隻手的顏色
           // index 為 0 (第一隻手) 用螢光綠，index 為 1 (第二隻手) 用淺紫色
           const handColor = (index === 0) ? '#00ffcc' : '#d1b3ff';
 
-          // 【功能升級】：抓取 MediaPipe 的左右手資訊
+          // 抓取 MediaPipe 的原始左右手資訊 ("Left" 或 "Right")
           const handedness = results.multiHandedness[index];
-          let handLabel = handedness.label; // 官方會輸出 "Left" 或 "Right"
+          let handLabel = window.isMirror ? (handedness.label === 'Left' ? 'Right' : 'Left') : handedness.label;
           
-          // 換成親切的中文標籤
-          let handLabelChinese = (handLabel === 'Left') ? '左手' : '右手';
+          /* 【關鍵修正】：鏡像邏輯轉換
+            如果目前是「鏡像模式」(isMirror = true)，視覺上的左右跟 AI 判定會相反。
+            所以：AI 判定是 Left (左手)，在鏡子裡看起來會是我們的右手，因此顯示「右手」。
+          */
+          let handLabelChinese = '';
+          if (isMirror) {
+            handLabelChinese = (handedness.label === 'Left') ? '右手' : '左手';
+          } else {
+            handLabelChinese = (handedness.label === 'Left') ? '左手' : '右手';
+          }
 
           const thumbTip = landmarks[4];   
           const indexFingerTip = landmarks[8]; 
@@ -149,7 +155,7 @@
           const distanceInPx = calculateDistance(thumbTip, indexFingerTip);
           const distanceInCm = pxToCm(distanceInPx, landmarks);
           
-          // 5. 畫大拇指尖圓圈 (套用動態顏色)
+          // 5. 畫大拇指尖圓圈
           canvasCtx.beginPath();
           canvasCtx.arc(thumbX, thumbY, 12, 0, 2 * Math.PI);
           canvasCtx.fillStyle = handColor;
@@ -158,7 +164,7 @@
           canvasCtx.strokeStyle = '#ffffff';
           canvasCtx.stroke();
 
-          // 6. 畫食指尖圓圈 (套用動態顏色)
+          // 6. 畫食指尖圓圈
           canvasCtx.beginPath();
           canvasCtx.arc(indexX, indexY, 12, 0, 2 * Math.PI);
           canvasCtx.fillStyle = handColor;
@@ -167,7 +173,7 @@
           canvasCtx.strokeStyle = '#ffffff';
           canvasCtx.stroke();
 
-          // 7. 畫兩指之間的連線 (套用動態顏色)
+          // 7. 畫兩指之間的連線
           canvasCtx.beginPath();
           canvasCtx.moveTo(thumbX, thumbY);
           canvasCtx.lineTo(indexX, indexY);
@@ -185,7 +191,6 @@
           canvasCtx.shadowBlur = 6;
           canvasCtx.textAlign = 'center';
           
-          // 同時顯示「哪隻手」和「測量公分」
           canvasCtx.fillText(`[${handLabelChinese}] 距離: ${distanceInCm.toFixed(1)} cm`, midX, midY - 15);
           canvasCtx.shadowBlur = 0;
         });
