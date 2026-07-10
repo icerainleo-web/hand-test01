@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>終極升級：AI 實時物理公分測量</title>
+  <title>雙手升級：AI 雙手實時物理公分測量</title>
   
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
@@ -60,8 +60,8 @@
 </head>
 <body>
 
-  <h1>AI 實時物理公分測量</h1>
-  <p>利用個人手掌當動態比例尺，請試著張開與捏合拇指與食指！</p>
+  <h1>AI 雙手獨立物理公分測量</h1>
+  <p>支援雙手同時測量！請伸出雙手並試著伸展拇指與食指！</p>
   
   <button class="btn-control" id="toggleMirror">切換為：正常模式</button>
 
@@ -92,26 +92,18 @@
       return Math.sqrt(dx * dx + dy * dy);
     }
 
-    /* 核心演算法：將像素距離轉換成物理公分 
-      利用手腕(點0)到中指根部(點9)的像素長度，來當作「動態比例尺」
+    /* 將像素距離轉換成物理公分 
+       利用每隻手各自的手腕(點0)到中指根部(點9)當作專屬比例尺，避免兩隻手前後距離不同造成的誤差
     */
     function pxToCm(pixelDistance, handLandmarks) {
       const wrist = handLandmarks[0];       // 點 0: 手腕
       const middleBase = handLandmarks[9];  // 點 9: 中指根部
       
-      // 計算目前手掌在畫面上的像素大小
       const handScaleInPx = calculateDistance(wrist, middleBase);
-      
-      // 根據統計，成年人手腕到中指根部的物理長度大約是 10 公分
       const avgHandSizeCm = 10; 
-      
-      // 計算目前環境下的「每公分換算像素（px/cm）」
       const pxPerCm = handScaleInPx / avgHandSizeCm;
       
-      // 如果防呆機制被觸發（避免除以零），給予預設值
       if (pxPerCm === 0) return 0;
-      
-      // 轉換出實時的物理公分
       return pixelDistance / pxPerCm;
     }
 
@@ -127,13 +119,16 @@
       canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
       canvasCtx.restore(); // 恢復畫布矩陣，確保後續文字絕不反轉
 
+      // 2. 如果有偵測到任何手
       if (results.multiHandLandmarks) {
+        
+        // 這個迴圈會自動處理每一隻偵測到的手（當 maxNumHands 設為 2，最多會跑兩次）
         for (const landmarks of results.multiHandLandmarks) {
           
           const thumbTip = landmarks[4];   // 拇指尖
           const indexFingerTip = landmarks[8]; // 食指尖
 
-          // 2. 座標修正：如果是鏡像模式，畫畫點的 X 座標要用 (畫布寬度 - 點座標) 反轉回來
+          // 3. 鏡像座標修正
           let thumbX = thumbTip.x * canvasElement.width;
           let indexX = indexFingerTip.x * canvasElement.width;
           
@@ -145,11 +140,11 @@
           const thumbY = thumbTip.y * canvasElement.height;
           const indexY = indexFingerTip.y * canvasElement.height;
 
-          // 3. 計算像素長度與物理公分
+          // 4. 計算該隻手的像素長度與物理公分
           const distanceInPx = calculateDistance(thumbTip, indexFingerTip);
           const distanceInCm = pxToCm(distanceInPx, landmarks);
           
-          // 4. 畫大拇指尖圓圈
+          // 5. 畫大拇指尖圓圈
           canvasCtx.beginPath();
           canvasCtx.arc(thumbX, thumbY, 12, 0, 2 * Math.PI);
           canvasCtx.fillStyle = '#00ffcc';
@@ -158,7 +153,7 @@
           canvasCtx.strokeStyle = '#ffffff';
           canvasCtx.stroke();
 
-          // 5. 畫食指尖圓圈
+          // 6. 畫食指尖圓圈
           canvasCtx.beginPath();
           canvasCtx.arc(indexX, indexY, 12, 0, 2 * Math.PI);
           canvasCtx.fillStyle = '#00ffcc';
@@ -167,7 +162,7 @@
           canvasCtx.strokeStyle = '#ffffff';
           canvasCtx.stroke();
 
-          // 6. 畫兩指之間的連線
+          // 7. 畫兩指之間的連線
           canvasCtx.beginPath();
           canvasCtx.moveTo(thumbX, thumbY);
           canvasCtx.lineTo(indexX, indexY);
@@ -175,7 +170,7 @@
           canvasCtx.strokeStyle = '#00ffcc';
           canvasCtx.stroke();
 
-          // 7. 計算兩點中線位置，並渲染出完美的公分文字
+          // 8. 計算中線位置，並渲染出公分文字
           const midX = (thumbX + indexX) / 2;
           const midY = (thumbY + indexY) / 2;
 
@@ -185,7 +180,6 @@
           canvasCtx.shadowBlur = 6;
           canvasCtx.textAlign = 'center';
           
-          // distanceInCm.toFixed(1) 保留到小數點後第一位
           canvasCtx.fillText(`距離: ${distanceInCm.toFixed(1)} cm`, midX, midY - 15);
           canvasCtx.shadowBlur = 0;
         }
@@ -197,8 +191,9 @@
         locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
       });
       
+      // 【核心升級】：將 maxNumHands 修改為 2，解鎖雙手追蹤！
       hands.setOptions({
-        maxNumHands: 1,
+        maxNumHands: 2,
         modelComplexity: 1,
         minDetectionConfidence: 0.7,
         minTrackingConfidence: 0.7
