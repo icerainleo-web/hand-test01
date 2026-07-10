@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>功能升級：兩指距離測量</title>
+  <title>終極修正：文字正向與鏡像控制</title>
   
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
@@ -20,6 +20,21 @@
     }
     h1 { font-size: 1.5rem; margin-top: 15px; color: #00ffcc; }
     
+    .btn-control {
+      background: #00ffcc;
+      color: #121212;
+      border: none;
+      padding: 10px 20px;
+      font-size: 1rem;
+      font-weight: bold;
+      border-radius: 20px;
+      cursor: pointer;
+      margin-bottom: 15px;
+      box-shadow: 0 4px 10px rgba(0,255,204,0.3);
+      transition: 0.2s;
+    }
+    .btn-control:hover { background: #00ccaa; }
+
     .container { 
       position: relative; 
       width: 100%;       
@@ -34,18 +49,19 @@
     
     #webcam { display: none; }
     
+    /* 移除之前的 CSS 翻轉，改由 JS 繪圖控制，確保文字永遠不反轉 */
     #canvas { 
       width: 100%; 
       height: 100%; 
       object-fit: cover;
-      transform: scaleX(-1); 
     }
   </style>
 </head>
 <body>
 
   <h1>拇指與食指距離測量</h1>
-  <p>請將手對著鏡頭，試著張開與捏合拇指與食指！</p>
+  
+  <button class="btn-control" id="toggleMirror">切換為：正常模式</button>
 
   <div class="container">
     <video id="webcam" autoplay playsinline muted></video>
@@ -56,38 +72,62 @@
     const videoElement = document.getElementById('webcam');
     const canvasElement = document.getElementById('canvas');
     const canvasCtx = canvasElement.getContext('2d');
+    const toggleBtn = document.getElementById('toggleMirror');
 
-    // 計算兩點之間距離的函式
+    // 預設為鏡像模式 (true)
+    let isMirror = true;
+
+    // 按鈕點擊事件：切換鏡像狀態
+    toggleBtn.addEventListener('click', () => {
+      isMirror = !isMirror;
+      toggleBtn.innerText = isMirror ? "切換為：正常模式" : "切換為：鏡像模式";
+    });
+
     function calculateDistance(point1, point2) {
-      // 在畫布上，使用 640x480 解析度的實際像素進行計算
       const dx = (point1.x - point2.x) * canvasElement.width;
       const dy = (point1.y - point2.y) * canvasElement.height;
-      // 畢氏定理：c^2 = a^2 + b^2
       return Math.sqrt(dx * dx + dy * dy);
     }
 
     function onResults(results) {
-      // 1. 清空畫布並畫上原始鏡頭畫面
       canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+      
+      // 保存目前的畫布狀態
+      canvasCtx.save();
+
+      // 如果是鏡像模式，我們只翻轉「底層影像」的繪製矩陣
+      if (isMirror) {
+        canvasCtx.translate(canvasElement.width, 0);
+        canvasCtx.scale(-1, 1);
+      }
+      
+      // 畫上鏡頭影像
       canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+      
+      // 影像畫完後，立刻恢復畫布矩陣，這樣後續畫的「文字」就不會被倒反！
+      canvasCtx.restore();
 
       if (results.multiHandLandmarks) {
         for (const landmarks of results.multiHandLandmarks) {
           
-          // 2. 抓取關鍵點位
-          const thumbTip = landmarks[4];  // 拇指指尖 (Thumb Tip)
-          const indexFingerTip = landmarks[8]; // 食指指尖 (Index Finger Tip)
+          const thumbTip = landmarks[4];  
+          const indexFingerTip = landmarks[8]; 
 
-          // 3. 轉換為實體畫布上的像素座標
-          const thumbX = thumbTip.x * canvasElement.width;
+          // 核心數學修正：如果是鏡像模式，畫畫點的 X 座標要用 (總寬度 - 點座標) 反轉回來
+          let thumbX = thumbTip.x * canvasElement.width;
+          let indexX = indexFingerTip.x * canvasElement.width;
+          
+          if (isMirror) {
+            thumbX = canvasElement.width - thumbX;
+            indexX = canvasElement.width - indexX;
+          }
+
           const thumbY = thumbTip.y * canvasElement.height;
-          const indexX = indexFingerTip.x * canvasElement.width;
           const indexY = indexFingerTip.y * canvasElement.height;
 
-          // 4. 計算並實時顯示距離
           const distance = calculateDistance(thumbTip, indexFingerTip);
           
-          // 在拇指尖畫圓
+          // 畫大拇指尖
           canvasCtx.beginPath();
           canvasCtx.arc(thumbX, thumbY, 12, 0, 2 * Math.PI);
           canvasCtx.fillStyle = '#00ffcc';
@@ -96,7 +136,7 @@
           canvasCtx.strokeStyle = '#ffffff';
           canvasCtx.stroke();
 
-          // 在食指尖畫圓
+          // 畫食指尖
           canvasCtx.beginPath();
           canvasCtx.arc(indexX, indexY, 12, 0, 2 * Math.PI);
           canvasCtx.fillStyle = '#00ffcc';
@@ -105,7 +145,7 @@
           canvasCtx.strokeStyle = '#ffffff';
           canvasCtx.stroke();
 
-          // 5. 畫出兩指之間的連線
+          // 畫兩指連線
           canvasCtx.beginPath();
           canvasCtx.moveTo(thumbX, thumbY);
           canvasCtx.lineTo(indexX, indexY);
@@ -113,18 +153,18 @@
           canvasCtx.strokeStyle = '#00ffcc';
           canvasCtx.stroke();
 
-          // 6. 將距離數值顯示在兩指的中點
+          // 計算中點，並寫上「正向、未倒反」的完美文字
           const midX = (thumbX + indexX) / 2;
           const midY = (thumbY + indexY) / 2;
 
-          canvasCtx.font = '24px -apple-system';
+          canvasCtx.font = 'bold 24px -apple-system, BlinkMacSystemFont, sans-serif';
           canvasCtx.fillStyle = '#ffffff';
-          // 加上黑色的陰影，讓文字在不同場景下都清晰可見
           canvasCtx.shadowColor = '#000000';
-          canvasCtx.shadowBlur = 4;
-          // distance.toFixed(0) 取整數，單位為像素 (px)
+          canvasCtx.shadowBlur = 6;
+          
+          // 文字置中對齊線段
+          canvasCtx.textAlign = 'center';
           canvasCtx.fillText(`距離: ${distance.toFixed(0)} px`, midX, midY - 15);
-          // 清除陰影設定，避免影響其他繪製
           canvasCtx.shadowBlur = 0;
         }
       }
@@ -136,9 +176,9 @@
       });
       
       hands.setOptions({
-        maxNumHands: 1, // 維持偵測一隻手，保持流暢度
+        maxNumHands: 1,
         modelComplexity: 1,
-        minDetectionConfidence: 0.7, // 提升信心門檻，讓偵測點更精準不易跳動
+        minDetectionConfidence: 0.7,
         minTrackingConfidence: 0.7
       });
       hands.onResults(onResults);
