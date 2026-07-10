@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>雙手升級：AI 雙手實時物理公分測量</title>
+  <title>色彩升級：雙手獨立辨識與顏色區分</title>
   
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
@@ -60,8 +60,8 @@
 </head>
 <body>
 
-  <h1>AI 雙手獨立物理公分測量</h1>
-  <p>支援雙手同時測量！請伸出雙手並試著伸展拇指與食指！</p>
+  <h1>AI 雙手色彩區分與左右手辨識</h1>
+  <p>第一隻手為螢光綠，第二隻手為淺紫色。還能自動辨識左右手喔！</p>
   
   <button class="btn-control" id="toggleMirror">切換為：正常模式</button>
 
@@ -85,24 +85,18 @@
       toggleBtn.innerText = isMirror ? "切換為：正常模式" : "切換為：鏡像模式";
     });
 
-    // 計算平面兩點像素距離的函式
     function calculateDistance(point1, point2) {
       const dx = (point1.x - point2.x) * canvasElement.width;
       const dy = (point1.y - point2.y) * canvasElement.height;
       return Math.sqrt(dx * dx + dy * dy);
     }
 
-    /* 將像素距離轉換成物理公分 
-       利用每隻手各自的手腕(點0)到中指根部(點9)當作專屬比例尺，避免兩隻手前後距離不同造成的誤差
-    */
     function pxToCm(pixelDistance, handLandmarks) {
-      const wrist = handLandmarks[0];       // 點 0: 手腕
-      const middleBase = handLandmarks[9];  // 點 9: 中指根部
-      
+      const wrist = handLandmarks[0];       
+      const middleBase = handLandmarks[9];  
       const handScaleInPx = calculateDistance(wrist, middleBase);
       const avgHandSizeCm = 10; 
       const pxPerCm = handScaleInPx / avgHandSizeCm;
-      
       if (pxPerCm === 0) return 0;
       return pixelDistance / pxPerCm;
     }
@@ -117,16 +111,27 @@
         canvasCtx.scale(-1, 1);
       }
       canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
-      canvasCtx.restore(); // 恢復畫布矩陣，確保後續文字絕不反轉
+      canvasCtx.restore(); 
 
-      // 2. 如果有偵測到任何手
-      if (results.multiHandLandmarks) {
+      // 2. 如果有偵測到手
+      if (results.multiHandLandmarks && results.multiHandedness) {
         
-        // 這個迴圈會自動處理每一隻偵測到的手（當 maxNumHands 設為 2，最多會跑兩次）
-        for (const landmarks of results.multiHandLandmarks) {
+        // 使用 index 來知道目前正在處理第幾隻手
+        results.multiHandLandmarks.forEach((landmarks, index) => {
           
-          const thumbTip = landmarks[4];   // 拇指尖
-          const indexFingerTip = landmarks[8]; // 食指尖
+          // 【功能升級】：動態決定這隻手的顏色
+          // index 為 0 (第一隻手) 用螢光綠，index 為 1 (第二隻手) 用淺紫色
+          const handColor = (index === 0) ? '#00ffcc' : '#d1b3ff';
+
+          // 【功能升級】：抓取 MediaPipe 的左右手資訊
+          const handedness = results.multiHandedness[index];
+          let handLabel = handedness.label; // 官方會輸出 "Left" 或 "Right"
+          
+          // 換成親切的中文標籤
+          let handLabelChinese = (handLabel === 'Left') ? '左手' : '右手';
+
+          const thumbTip = landmarks[4];   
+          const indexFingerTip = landmarks[8]; 
 
           // 3. 鏡像座標修正
           let thumbX = thumbTip.x * canvasElement.width;
@@ -140,49 +145,50 @@
           const thumbY = thumbTip.y * canvasElement.height;
           const indexY = indexFingerTip.y * canvasElement.height;
 
-          // 4. 計算該隻手的像素長度與物理公分
+          // 4. 計算長度
           const distanceInPx = calculateDistance(thumbTip, indexFingerTip);
           const distanceInCm = pxToCm(distanceInPx, landmarks);
           
-          // 5. 畫大拇指尖圓圈
+          // 5. 畫大拇指尖圓圈 (套用動態顏色)
           canvasCtx.beginPath();
           canvasCtx.arc(thumbX, thumbY, 12, 0, 2 * Math.PI);
-          canvasCtx.fillStyle = '#00ffcc';
+          canvasCtx.fillStyle = handColor;
           canvasCtx.fill();
           canvasCtx.lineWidth = 3;
           canvasCtx.strokeStyle = '#ffffff';
           canvasCtx.stroke();
 
-          // 6. 畫食指尖圓圈
+          // 6. 畫食指尖圓圈 (套用動態顏色)
           canvasCtx.beginPath();
           canvasCtx.arc(indexX, indexY, 12, 0, 2 * Math.PI);
-          canvasCtx.fillStyle = '#00ffcc';
+          canvasCtx.fillStyle = handColor;
           canvasCtx.fill();
           canvasCtx.lineWidth = 3;
           canvasCtx.strokeStyle = '#ffffff';
           canvasCtx.stroke();
 
-          // 7. 畫兩指之間的連線
+          // 7. 畫兩指之間的連線 (套用動態顏色)
           canvasCtx.beginPath();
           canvasCtx.moveTo(thumbX, thumbY);
           canvasCtx.lineTo(indexX, indexY);
           canvasCtx.lineWidth = 4;
-          canvasCtx.strokeStyle = '#00ffcc';
+          canvasCtx.strokeStyle = handColor;
           canvasCtx.stroke();
 
-          // 8. 計算中線位置，並渲染出公分文字
+          // 8. 計算中線位置並渲染文字
           const midX = (thumbX + indexX) / 2;
           const midY = (thumbY + indexY) / 2;
 
-          canvasCtx.font = 'bold 24px -apple-system, BlinkMacSystemFont, sans-serif';
+          canvasCtx.font = 'bold 22px -apple-system, BlinkMacSystemFont, sans-serif';
           canvasCtx.fillStyle = '#ffffff';
           canvasCtx.shadowColor = '#000000';
           canvasCtx.shadowBlur = 6;
           canvasCtx.textAlign = 'center';
           
-          canvasCtx.fillText(`距離: ${distanceInCm.toFixed(1)} cm`, midX, midY - 15);
+          // 同時顯示「哪隻手」和「測量公分」
+          canvasCtx.fillText(`[${handLabelChinese}] 距離: ${distanceInCm.toFixed(1)} cm`, midX, midY - 15);
           canvasCtx.shadowBlur = 0;
-        }
+        });
       }
     }
 
@@ -191,7 +197,6 @@
         locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
       });
       
-      // 【核心升級】：將 maxNumHands 修改為 2，解鎖雙手追蹤！
       hands.setOptions({
         maxNumHands: 2,
         modelComplexity: 1,
