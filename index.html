@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>手機/電腦雙支援：AI手勢偵測</title>
+  <title>功能升級：兩指距離測量</title>
   
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
@@ -19,7 +19,6 @@
       padding: 10px;
     }
     h1 { font-size: 1.5rem; margin-top: 15px; color: #00ffcc; }
-    p { font-size: 0.9rem; color: #aaa; margin-bottom: 15px; }
     
     .container { 
       position: relative; 
@@ -45,8 +44,8 @@
 </head>
 <body>
 
-  <h1>AI 手勢偵測 (行動優化版)</h1>
-  <p>請允許瀏覽器取用相機，並對著鏡頭伸出手掌！</p>
+  <h1>拇指與食指距離測量</h1>
+  <p>請將手對著鏡頭，試著張開與捏合拇指與食指！</p>
 
   <div class="container">
     <video id="webcam" autoplay playsinline muted></video>
@@ -54,52 +53,96 @@
   </div>
 
   <script>
-    // 捕捉手機端全局未知的錯誤並彈窗提示
-    window.onerror = function(message, source, lineno, colno, error) {
-      alert("程式發生錯誤: " + message + " (行號: " + lineno + ")");
-      return false;
-    };
-
     const videoElement = document.getElementById('webcam');
     const canvasElement = document.getElementById('canvas');
     const canvasCtx = canvasElement.getContext('2d');
 
+    // 計算兩點之間距離的函式
+    function calculateDistance(point1, point2) {
+      // 在畫布上，使用 640x480 解析度的實際像素進行計算
+      const dx = (point1.x - point2.x) * canvasElement.width;
+      const dy = (point1.y - point2.y) * canvasElement.height;
+      // 畢氏定理：c^2 = a^2 + b^2
+      return Math.sqrt(dx * dx + dy * dy);
+    }
+
     function onResults(results) {
+      // 1. 清空畫布並畫上原始鏡頭畫面
       canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
       canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
 
       if (results.multiHandLandmarks) {
         for (const landmarks of results.multiHandLandmarks) {
-          const indexFingerTip = landmarks[8];
-          const x = indexFingerTip.x * canvasElement.width;
-          const y = indexFingerTip.y * canvasElement.height;
+          
+          // 2. 抓取關鍵點位
+          const thumbTip = landmarks[4];  // 拇指指尖 (Thumb Tip)
+          const indexFingerTip = landmarks[8]; // 食指指尖 (Index Finger Tip)
 
+          // 3. 轉換為實體畫布上的像素座標
+          const thumbX = thumbTip.x * canvasElement.width;
+          const thumbY = thumbTip.y * canvasElement.height;
+          const indexX = indexFingerTip.x * canvasElement.width;
+          const indexY = indexFingerTip.y * canvasElement.height;
+
+          // 4. 計算並實時顯示距離
+          const distance = calculateDistance(thumbTip, indexFingerTip);
+          
+          // 在拇指尖畫圓
           canvasCtx.beginPath();
-          canvasCtx.arc(x, y, 14, 0, 2 * Math.PI);
+          canvasCtx.arc(thumbX, thumbY, 12, 0, 2 * Math.PI);
           canvasCtx.fillStyle = '#00ffcc';
           canvasCtx.fill();
-          canvasCtx.lineWidth = 4;
+          canvasCtx.lineWidth = 3;
           canvasCtx.strokeStyle = '#ffffff';
           canvasCtx.stroke();
+
+          // 在食指尖畫圓
+          canvasCtx.beginPath();
+          canvasCtx.arc(indexX, indexY, 12, 0, 2 * Math.PI);
+          canvasCtx.fillStyle = '#00ffcc';
+          canvasCtx.fill();
+          canvasCtx.lineWidth = 3;
+          canvasCtx.strokeStyle = '#ffffff';
+          canvasCtx.stroke();
+
+          // 5. 畫出兩指之間的連線
+          canvasCtx.beginPath();
+          canvasCtx.moveTo(thumbX, thumbY);
+          canvasCtx.lineTo(indexX, indexY);
+          canvasCtx.lineWidth = 4;
+          canvasCtx.strokeStyle = '#00ffcc';
+          canvasCtx.stroke();
+
+          // 6. 將距離數值顯示在兩指的中點
+          const midX = (thumbX + indexX) / 2;
+          const midY = (thumbY + indexY) / 2;
+
+          canvasCtx.font = '24px -apple-system';
+          canvasCtx.fillStyle = '#ffffff';
+          // 加上黑色的陰影，讓文字在不同場景下都清晰可見
+          canvasCtx.shadowColor = '#000000';
+          canvasCtx.shadowBlur = 4;
+          // distance.toFixed(0) 取整數，單位為像素 (px)
+          canvasCtx.fillText(`距離: ${distance.toFixed(0)} px`, midX, midY - 15);
+          // 清除陰影設定，避免影響其他繪製
+          canvasCtx.shadowBlur = 0;
         }
       }
     }
 
-    // 確保套件載入成功才執行
     try {
       const hands = new Hands({
         locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
       });
       
       hands.setOptions({
-        maxNumHands: 1, // 手機端先限制為 1 隻手以提升相容性
+        maxNumHands: 1, // 維持偵測一隻手，保持流暢度
         modelComplexity: 1,
-        minDetectionConfidence: 0.5,
-        minTrackingConfidence: 0.5
+        minDetectionConfidence: 0.7, // 提升信心門檻，讓偵測點更精準不易跳動
+        minTrackingConfidence: 0.7
       });
       hands.onResults(onResults);
 
-      // 強制用現代標準 API 請求鏡頭，增加手機相容性
       const camera = new Camera(videoElement, {
         onFrame: async () => {
           await hands.send({image: videoElement});
@@ -108,13 +151,10 @@
         height: 480,
         facingMode: 'user'
       });
-      
-      camera.start().catch(err => {
-        alert("相機啟動失敗: " + err.message + "\n請檢查手機系統權限是否有分派給瀏覽器。");
-      });
+      camera.start();
 
     } catch (e) {
-      alert("MediaPipe 初始化失敗: " + e.message);
+      console.error("MediaPipe 初始化失敗: " + e.message);
     }
   </script>
 </body>
