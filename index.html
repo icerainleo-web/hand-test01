@@ -1,82 +1,121 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>手機/電腦雙支援：AI手勢偵測</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>手機/電腦雙支援：AI手勢偵測</title>
+  
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
 
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
-
-<style>
-* { box-sizing: border-box; }
-body {
-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-text-align: center;
-background: #121212;
-color: #e0e0e0;
-margin: 0;
-padding: 10px;
-}
-h1 { font-size: 1.5rem; margin-top: 15px; color: #00ffcc; }
-p { font-size: 0.9rem; color: #aaa; margin-bottom: 15px; }
-
-/* 容器：設定最大寬度，並保持 4:3 的視訊比例 /
-.container {
-position: relative;
-width: 100%;
- max-width: 500px;
-aspect-ratio: 4 / 3; / 固定比例，防止畫面變形 */
-margin: 0 auto;
-background: #000;
-border: 2px solid #333;
-border-radius: 12px;
-overflow: hidden;
-box-shadow: 0 4px 20px rgba(0,0,0,0.5);
-}
-
-/* 隱藏原始視訊元件 */
-#webcam { display: none; }
-
-/* 畫布：寬度 100% 填滿容器，並套用鏡像效果（讓動作跟鏡子一樣同步） /
-#canvas {
-width: 100%;
-height: 100%;
-object-fit: cover;
-transform: scaleX(-1); / 左右鏡像反轉 */
-}
-</style>
+  <style>
+    * { box-sizing: border-box; }
+    body { 
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+      text-align: center; 
+      background: #121212; 
+      color: #e0e0e0; 
+      margin: 0;
+      padding: 10px;
+    }
+    h1 { font-size: 1.5rem; margin-top: 15px; color: #00ffcc; }
+    p { font-size: 0.9rem; color: #aaa; margin-bottom: 15px; }
+    
+    .container { 
+      position: relative; 
+      width: 100%;       
+      max-width: 500px; 
+      aspect-ratio: 4 / 3; 
+      margin: 0 auto; 
+      background: #000;
+      border: 2px solid #333;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    
+    #webcam { display: none; }
+    
+    #canvas { 
+      width: 100%; 
+      height: 100%; 
+      object-fit: cover;
+      transform: scaleX(-1); 
+    }
+  </style>
 </head>
 <body>
 
-<h1>AI 手勢偵測 (行動優化版)</h1>
-<p>請允許瀏覽器取用相機，並對著鏡頭伸出手掌！</p>
+  <h1>AI 手勢偵測 (行動優化版)</h1>
+  <p>請允許瀏覽器取用相機，並對著鏡頭伸出手掌！</p>
 
-<div class="container">
-<video id="webcam" autoplay playsinline></video>
-<canvas id="canvas" width="640" height="480"></canvas>
-</div>
+  <div class="container">
+    <video id="webcam" autoplay playsinline muted></video>
+    <canvas id="canvas" width="640" height="480"></canvas>
+  </div>
 
-<script>
-const videoElement = document.getElementById('webcam');
-const canvasElement = document.getElementById('canvas');
-const canvasCtx = canvasElement.getContext('2d');
+  <script>
+    // 捕捉手機端全局未知的錯誤並彈窗提示
+    window.onerror = function(message, source, lineno, colno, error) {
+      alert("程式發生錯誤: " + message + " (行號: " + lineno + ")");
+      return false;
+    };
 
-// 1. 偵測到手掌後的繪製與加工
-function onResults(results) {
-// 清空畫布並畫上當前鏡頭畫面
-canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+    const videoElement = document.getElementById('webcam');
+    const canvasElement = document.getElementById('canvas');
+    const canvasCtx = canvasElement.getContext('2d');
 
-if (results.multiHandLandmarks) {
-for (const landmarks of results.multiHandLandmarks) {
+    function onResults(results) {
+      canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+      canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
 
-// 抓取食指指尖（MediaPipe 點位 8）
-const indexFingerTip = landmarks[8];
-const x = indexFingerTip.x * canvasElement.width;
-const y = indexFingerTip.y * canvasElement.height;
+      if (results.multiHandLandmarks) {
+        for (const landmarks of results.multiHandLandmarks) {
+          const indexFingerTip = landmarks[8];
+          const x = indexFingerTip.x * canvasElement.width;
+          const y = indexFingerTip.y * canvasElement.height;
 
-// 在食指尖畫上發光的螢光綠圓圈
-canvasCtx.beginPath();
-canvasCtx.arc(x, y, 14, 0, 2 * Math.PI);
-canvasCtx.fillStyle = '#00ffcc';
+          canvasCtx.beginPath();
+          canvasCtx.arc(x, y, 14, 0, 2 * Math.PI);
+          canvasCtx.fillStyle = '#00ffcc';
+          canvasCtx.fill();
+          canvasCtx.lineWidth = 4;
+          canvasCtx.strokeStyle = '#ffffff';
+          canvasCtx.stroke();
+        }
+      }
+    }
+
+    // 確保套件載入成功才執行
+    try {
+      const hands = new Hands({
+        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+      });
+      
+      hands.setOptions({
+        maxNumHands: 1, // 手機端先限制為 1 隻手以提升相容性
+        modelComplexity: 1,
+        minDetectionConfidence: 0.5,
+        minTrackingConfidence: 0.5
+      });
+      hands.onResults(onResults);
+
+      // 強制用現代標準 API 請求鏡頭，增加手機相容性
+      const camera = new Camera(videoElement, {
+        onFrame: async () => {
+          await hands.send({image: videoElement});
+        },
+        width: 640,
+        height: 480,
+        facingMode: 'user'
+      });
+      
+      camera.start().catch(err => {
+        alert("相機啟動失敗: " + err.message + "\n請檢查手機系統權限是否有分派給瀏覽器。");
+      });
+
+    } catch (e) {
+      alert("MediaPipe 初始化失敗: " + e.message);
+    }
+  </script>
+</body>
+</html>
